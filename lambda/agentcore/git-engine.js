@@ -23,6 +23,7 @@
 // failure fails the stage only when THIS stage created commits that did not
 // reach the remote (new work at risk = the documented v2 loss mode).
 
+import { Logger } from '@aws-lambda-powertools/logger';
 import { mkdir, readFile, writeFile, rm, statfs } from 'node:fs/promises';
 import path from 'node:path';
 import { buildCloneUrl } from '../shared/git-providers.js';
@@ -31,6 +32,8 @@ import {
   resolveGitCommitter as defaultResolveGitCommitter,
   withGitCredential as defaultWithGitCredential,
 } from './git-auth.js';
+
+const logger = new Logger({ persistentKeys: { component: 'agentcore', module: 'git-engine' } });
 
 // Neutral committer identity, passed per-command via `-c` so the repo config
 // is never mutated (and the agent can't inherit it for its own commits).
@@ -104,7 +107,7 @@ export const ensureRuntimeExcludes = async ({ dir }) => {
   } catch (e) {
     // Never let hygiene bookkeeping break a commit — but a failure here means
     // runtime files could leak into the repo, so it must be visible.
-    console.error('[git-engine] runtime-exclude write failed:', e?.message);
+    logger.error('runtime-exclude write failed', e);
     return { ensured: false, error: e?.message };
   }
 };
@@ -242,7 +245,7 @@ export const commitAll = async ({
   git = runGit,
   attempts = 3,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
-  log = (...a) => console.error('[git-engine]', ...a),
+  log = (...a) => logger.error(...a), // TODO: remove this (only used in tests)
   rmDir = (p) => rm(p, { recursive: true, force: true }),
 }) => {
   // Runtime files (.aidlc/.claude/…) must never enter the user's history —
@@ -382,7 +385,7 @@ export const reclaimIgnoredDirs = async ({
   dir,
   git = runGit,
   rmDir = (p) => rm(p, { recursive: true, force: true }),
-  log = (...a) => console.error('[git-engine]', ...a),
+  log = (...a) => logger.error(...a), // TODO: remove this (only used in tests)
 }) => {
   const status = await git(['status', '--porcelain', '--ignored'], { cwd: dir });
   if (status.exitCode !== 0) return [];
@@ -451,7 +454,7 @@ export const pushBranch = async ({
   git = runGit,
   withGitCredential = defaultWithGitCredential,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
-  log = (...a) => console.error('[git-engine]', ...a),
+  log = (...a) => logger.error(...a), // TODO: remove this (only used in tests)
 }) => {
   if (!branch) return { pushed: false, reason: 'no_branch' };
 
@@ -648,7 +651,7 @@ export const ensureLaneBranch = async ({
   git = runGit,
   withGitCredential = defaultWithGitCredential,
   sleep,
-  log = (...a) => console.error('[git-engine]', ...a),
+  log = (...a) => logger.error(...a), // TODO: remove this (only used in tests)
 }) => {
   if (!unitBranch || !intentBranch) return { ready: false, reason: 'missing_branch' };
   const fetch = await fetchOrigin({
@@ -795,7 +798,7 @@ export const mergeBranchNoFf = async ({
   withGitCredential = defaultWithGitCredential,
   resolveGitCommitter = defaultResolveGitCommitter,
   sleep,
-  log = (...a) => console.error('[git-engine]', ...a),
+  log = (...a) => logger.error(...a), // TODO: remove this (only used in tests)
 }) => {
   if (!unitBranch || !intentBranch) return { merged: false, reason: 'missing_branch' };
   const fetch = await fetchOrigin({
@@ -1035,7 +1038,7 @@ export const concludeConflictMerge = async ({
   withGitCredential = defaultWithGitCredential,
   resolveGitCommitter = defaultResolveGitCommitter,
   sleep,
-  log = (...a) => console.error('[git-engine]', ...a),
+  log = (...a) => logger.error(...a), // TODO: remove this (only used in tests)
 }) => {
   const abort = async () => {
     await git(['merge', '--abort'], { cwd: dir });
@@ -1134,7 +1137,7 @@ export const commitAndPushAll = async ({
   withGitCredential = defaultWithGitCredential,
   resolveGitCommitter = defaultResolveGitCommitter,
   sleep,
-  log = (...a) => console.error('[git-engine]', ...a),
+  log = (...a) => logger.error(...a), // TODO: remove this (only used in tests)
 }) => {
   const results = [];
   const multi = repos.length > 1;
